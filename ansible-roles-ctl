@@ -1,0 +1,93 @@
+#!/usr/bin/env python
+
+import argparse
+import yaml
+import os.path
+import re
+import ansible.constants as C
+from ansible.galaxy import Galaxy
+from ansible.playbook.role.requirement import RoleRequirement
+from ansible.galaxy.role import GalaxyRole
+from git import Repo
+
+
+# reusing default options from the CLI.
+# there is no way to get them properly because it is merged with the
+# CLI parser.
+class GalaxyDefaultOptions:
+    def __init__(self):
+        self.ignore_certs = C.GALAXY_IGNORE_CERTS
+        self.roles_path = C.DEFAULT_ROLES_PATH
+
+# reusing GalaxyRole initialization to obtain name and path properly
+class AnsibleRole(GalaxyRole):
+    def __init__(self, **role):
+        galaxy = Galaxy(GalaxyDefaultOptions())
+        super(AnsibleRole, self).__init__(galaxy, **role)
+        self.exists = os.path.exists(self.path)
+        if self.exists:
+            try:
+                self.repo = Repo(self.path)
+            except Exception as e:
+                self.repo = None
+    def isValid(self):
+        if self.scm and self.scm != 'git':
+            print("role '{}' is using an unsupported SCM, skipping".format(self.name))
+            return False
+        if not re.search("https?://", self.src):
+            print("role '{}' is from Ansible Galaxy, skipping".format(self.name))
+            return False
+        if not self.exists:
+            return True
+        if not self.repo:
+            print("role '{}' is not a valid SCM directory, skipping".format(self.name))
+            return False
+        if self.repo.bare:
+            print("role '{}' is a bare repository, skipping".format(self.name))
+            return False
+        return True
+
+def load_deps():
+    stream = open("requirements.yml", "r")
+    role_list = dict()
+    try:
+        required_roles = yaml.safe_load(stream)
+    except Exception as e:
+        print("Unable to load data from the requirements file")
+        exit(-1)
+    if required_roles is None:
+        print("No roles found in requirements file")
+        exit(0)
+    for dep in required_roles:
+        role_info = RoleRequirement.role_yaml_parse(dep)
+        print(role_info)
+        role = AnsibleRole(**role_info)
+        if not role.isValid():
+            continue
+        role_list[role.name] = role
+    return role_list
+
+def action_status(dep_list, args):
+    for role in dep_list.values():
+        if role.exists:
+            print("role '{}' is properly installed, using version: {}".format(role.name, role.repo.head.reference))
+        else:
+            print("role '{}' is missing".format(role.name))
+
+
+# declare available subcommands and options
+parser = argparse.ArgumentParser(description='Manage roles installation')
+subparsers = parser.add_subparsers(help='sub-command help')
+parser_status = subparsers.add_parser('status', help='inform about roles installation status')
+parser_status.set_defaults(func=action_status)
+
+# let's parse
+args = parser.parse_args()
+# load user config
+dep_list = load_deps()
+# action!
+if hasattr(args, 'func'):
+    args.func(dep_list, args)
+else:
+    parser.print_help()
+
