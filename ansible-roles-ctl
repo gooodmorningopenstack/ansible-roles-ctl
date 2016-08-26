@@ -8,7 +8,7 @@ import ansible.constants as C
 from ansible.galaxy import Galaxy
 from ansible.playbook.role.requirement import RoleRequirement
 from ansible.galaxy.role import GalaxyRole
-from git import Repo
+from git import Repo,Commit
 
 
 # reusing default options from the CLI.
@@ -30,6 +30,23 @@ class AnsibleRole(GalaxyRole):
                 self.repo = Repo(self.path)
             except Exception as e:
                 self.repo = None
+        # if no version specified, then master is considered default
+        if not self.version:
+            self.version = 'master'
+    def localBranch(self):
+        return self.repo.head.reference
+    def remoteBranch(self):
+        # used configured tracking branch if exist
+        branch = self.localBranch().tracking_branch()
+        if branch:
+            return branch
+        # or try a matching branch name in 'origin' remote
+        if self.localBranch().name in self.repo.remotes.origin.refs:
+            ref = self.repo.remotes.origin.refs[self.localBranch().name]
+            self.localBranch().set_tracking_branch(ref)
+            print("role '{}' lacked tracking branch configuration, fixed".format(self.name))
+            return ref
+        return None
     def isValid(self):
         if self.scm and self.scm != 'git':
             print("role '{}' is using an unsupported SCM, skipping".format(self.name))
@@ -37,6 +54,7 @@ class AnsibleRole(GalaxyRole):
         if not re.search("https?://", self.src):
             print("role '{}' is from Ansible Galaxy, skipping".format(self.name))
             return False
+        # if role is not installed yet, then skip following tests
         if not self.exists:
             return True
         if not self.repo:
@@ -45,10 +63,24 @@ class AnsibleRole(GalaxyRole):
         if self.repo.bare:
             print("role '{}' is a bare repository, skipping".format(self.name))
             return False
+        if self.remoteBranch() is None:
+            print("role '{}' is on a local branch (no corresponding remote branch), skipping".format(self.name))
+            return False
+        # TODO: check if the local version match the configured one
         return True
+    def fetchUpdates(self):
+        self.repo.remotes.origin.fetch()
+    def commitsAhead(self):
+        return Commit.iter_items(self.repo, "{}..HEAD".format(self.remoteBranch()))
+    def commitsBehind(self):
+        return Commit.iter_items(self.repo, "HEAD..{}".format(self.remoteBranch()))
 
 def load_deps():
-    stream = open("requirements.yml", "r")
+    try:
+        stream = open("requirements.yml", "r")
+    except Exception as e:
+        print("Unable to open requirements file")
+        exit(-1)
     role_list = dict()
     try:
         required_roles = yaml.safe_load(stream)
@@ -60,7 +92,6 @@ def load_deps():
         exit(0)
     for dep in required_roles:
         role_info = RoleRequirement.role_yaml_parse(dep)
-        print(role_info)
         role = AnsibleRole(**role_info)
         if not role.isValid():
             continue
@@ -68,9 +99,31 @@ def load_deps():
     return role_list
 
 def action_status(dep_list, args):
-    for role in dep_list.values():
+    for role_name in sorted(dep_list.keys()):
+        role = dep_list[role_name]
         if role.exists:
-            print("role '{}' is properly installed, using version: {}".format(role.name, role.repo.head.reference))
+            print("role '{}' is properly installed, using version: {}".format(role.name, role.localBranch().name))
+            if role.repo.is_dirty():
+                print("  has local changes (please commit or cleanup)".format(role.name))
+            role.fetchUpdates()
+            #print(role.version)
+            local_commit = role.localBranch().commit
+            remote_commit = role.remoteBranch().commit
+            if local_commit == remote_commit:
+                print("  is up-to-date with origin")
+            else:
+                la = list(role.commitsAhead())
+                lb = list(role.commitsBehind())
+                if la and lb:
+                    print("  has diverged from origin")
+                if la:
+                    print("  has {} commits ahead".format(len(la)))
+                    # TODO: display CHANGELOG diff
+                if lb:
+                    print("  has {} commits behind".format(len(lb)))
+                    # TODO: display CHANGELOG diff
+            #for c in Commit.iter_items(role.repo, "{}..HEAD".format(role.remoteBranch())):
+            #    print(c.summary)
         else:
             print("role '{}' is missing".format(role.name))
 
