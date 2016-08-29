@@ -21,32 +21,40 @@ class GalaxyDefaultOptions:
 
 # reusing GalaxyRole initialization to obtain name and path properly
 class AnsibleRole(GalaxyRole):
+
     def __init__(self, **role):
         galaxy = Galaxy(GalaxyDefaultOptions())
         super(AnsibleRole, self).__init__(galaxy, **role)
+
         self.exists = os.path.exists(self.path)
         if self.exists:
             try:
                 self.repo = Repo(self.path)
             except Exception as e:
                 self.repo = None
+
         # if no version specified, then master is considered default
         if not self.version:
             self.version = 'master'
+
     def localBranch(self):
         return self.repo.head.reference
+
     def remoteBranch(self):
         # used configured tracking branch if exist
         branch = self.localBranch().tracking_branch()
         if branch:
             return branch
+
         # or try a matching branch name in 'origin' remote
         if self.localBranch().name in self.repo.remotes.origin.refs:
             ref = self.repo.remotes.origin.refs[self.localBranch().name]
             self.localBranch().set_tracking_branch(ref)
             print("role '{}' lacked tracking branch configuration, fixed".format(self.name))
             return ref
+
         return None
+
     def isValid(self):
         if self.scm and self.scm != 'git':
             print("role '{}' is using an unsupported SCM, skipping".format(self.name))
@@ -54,9 +62,11 @@ class AnsibleRole(GalaxyRole):
         if not re.search("https?://", self.src):
             print("role '{}' is from Ansible Galaxy, skipping".format(self.name))
             return False
+
         # if role is not installed yet, then skip following tests
         if not self.exists:
             return True
+
         if not self.repo:
             print("role '{}' is not a valid SCM directory, skipping".format(self.name))
             return False
@@ -66,12 +76,16 @@ class AnsibleRole(GalaxyRole):
         if self.remoteBranch() is None:
             print("role '{}' is on a local branch (no corresponding remote branch), skipping".format(self.name))
             return False
+
         # TODO: check if the local version match the configured one
         return True
+
     def fetchUpdates(self):
         self.repo.remotes.origin.fetch()
+
     def commitsAhead(self):
         return Commit.iter_items(self.repo, "{}..HEAD".format(self.remoteBranch()))
+
     def commitsBehind(self):
         return Commit.iter_items(self.repo, "HEAD..{}".format(self.remoteBranch()))
 
@@ -81,36 +95,46 @@ def load_deps():
     except Exception as e:
         print("Unable to open requirements file")
         exit(-1)
-    role_list = dict()
+
     try:
         required_roles = yaml.safe_load(stream)
     except Exception as e:
         print("Unable to load data from the requirements file")
         exit(-1)
+
     if required_roles is None:
         print("No roles found in requirements file")
         exit(0)
+
+    role_list = dict()
     for dep in required_roles:
         role_info = RoleRequirement.role_yaml_parse(dep)
         role = AnsibleRole(**role_info)
         if not role.isValid():
             continue
         role_list[role.name] = role
+
     return role_list
 
 def action_status(dep_list, args):
     for role_name in sorted(dep_list.keys()):
         role = dep_list[role_name]
+
         if role.exists:
             print("role '{}' is properly installed, using version: {}".format(role.name, role.localBranch().name))
+
             if role.repo.is_dirty():
                 print("  has local changes (please commit or cleanup)".format(role.name))
+
             role.fetchUpdates()
             #print(role.version)
+
             local_commit = role.localBranch().commit
             remote_commit = role.remoteBranch().commit
+
             if local_commit == remote_commit:
                 print("  is up-to-date with origin")
+
             else:
                 la = list(role.commitsAhead())
                 lb = list(role.commitsBehind())
@@ -122,8 +146,10 @@ def action_status(dep_list, args):
                 if lb:
                     print("  has {} commits behind".format(len(lb)))
                     # TODO: display CHANGELOG diff
+
             #for c in Commit.iter_items(role.repo, "{}..HEAD".format(role.remoteBranch())):
             #    print(c.summary)
+
         else:
             print("role '{}' is missing".format(role.name))
 
@@ -138,6 +164,7 @@ parser_status.set_defaults(func=action_status)
 args = parser.parse_args()
 # load user config
 dep_list = load_deps()
+
 # action!
 if hasattr(args, 'func'):
     args.func(dep_list, args)
