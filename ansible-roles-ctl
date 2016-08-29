@@ -8,7 +8,7 @@ import ansible.constants as C
 from ansible.galaxy import Galaxy
 from ansible.playbook.role.requirement import RoleRequirement
 from ansible.galaxy.role import GalaxyRole
-from git import Repo,Commit,TagReference
+from git import Repo,Commit
 
 
 # reusing default options from the CLI.
@@ -81,8 +81,7 @@ class AnsibleRole(GalaxyRole):
         self.version_commit = None
         if re.match("^v\d+\.\d+\.(\d+)?$", self.version):
             try:
-                tagref = TagReference(self.repo, "refs/tags/{}".format(self.version), check_path=True)
-                self.version_commit = tagref.commit
+                self.version_commit = self.repo.tags[self.version].commit
             except ValueError as e:
                 print("role '{}' is targeting an unexisting version ({}), skipping".format(self.name, self.version))
                 return False
