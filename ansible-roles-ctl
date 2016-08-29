@@ -8,7 +8,7 @@ import ansible.constants as C
 from ansible.galaxy import Galaxy
 from ansible.playbook.role.requirement import RoleRequirement
 from ansible.galaxy.role import GalaxyRole
-from git import Repo,Commit
+from git import Repo,Commit,TagReference
 
 
 # reusing default options from the CLI.
@@ -78,6 +78,18 @@ class AnsibleRole(GalaxyRole):
             return False
 
         # TODO: check if the local version match the configured one
+        self.version_commit = None
+        if re.match("^v\d+\.\d+\.(\d+)?$", self.version):
+            try:
+                tagref = TagReference(self.repo, "refs/tags/{}".format(self.version), check_path=True)
+                self.version_commit = tagref.commit
+            except ValueError as e:
+                print("role '{}' is targeting an unexisting version ({}), skipping".format(self.name, self.version))
+                return False
+        elif self.localBranch().name != self.version:
+            print("role '{}' is not following the branch defined in requirements, skipping".format(self.name))
+            return False
+
         return True
 
     def fetchUpdates(self):
@@ -127,12 +139,15 @@ def action_status(dep_list, args):
                 print("  has local changes (please commit or cleanup)".format(role.name))
 
             role.fetchUpdates()
-            #print(role.version)
 
             local_commit = role.localBranch().commit
             remote_commit = role.remoteBranch().commit
 
-            if local_commit == remote_commit:
+            if role.version_commit:
+                if role.localBranch().commit != role.version_commit:
+                    print("  is targeting version '{}' but repository do not match".format(role.version))
+
+            elif local_commit == remote_commit:
                 print("  is up-to-date with origin")
 
             else:
