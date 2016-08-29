@@ -132,7 +132,7 @@ def action_status(dep_list, args):
         role = dep_list[role_name]
 
         if role.exists:
-            print("role '{}' is properly installed, using version: {}".format(role.name, role.localBranch().name))
+            print("role '{}' is properly installed".format(role.name))
 
             if role.repo.is_dirty():
                 print("  has local changes (please commit or cleanup)".format(role.name))
@@ -143,23 +143,28 @@ def action_status(dep_list, args):
             remote_commit = role.remoteBranch().commit
 
             if role.version_commit:
-                if role.localBranch().commit != role.version_commit:
+                if role.localBranch().commit == role.version_commit:
+                    print("  is at version '{}'".format(role.version))
+                else:
                     print("  is targeting version '{}' but repository do not match".format(role.version))
 
-            elif local_commit == remote_commit:
-                print("  is up-to-date with origin")
-
             else:
-                la = list(role.commitsAhead())
-                lb = list(role.commitsBehind())
-                if la and lb:
-                    print("  has diverged from origin")
-                if la:
-                    print("  has {} commits ahead".format(len(la)))
-                    # TODO: display CHANGELOG diff
-                if lb:
-                    print("  has {} commits behind".format(len(lb)))
-                    # TODO: display CHANGELOG diff
+                print("  using branch '{}'".format(role.localBranch().name))
+
+                if local_commit == remote_commit:
+                    print("  is up-to-date with origin")
+
+                else:
+                    la = list(role.commitsAhead())
+                    lb = list(role.commitsBehind())
+                    if la and lb:
+                        print("  has diverged from origin")
+                    if la:
+                        print("  has {} commits ahead".format(len(la)))
+                        # TODO: display CHANGELOG diff
+                    if lb:
+                        print("  has {} commits behind".format(len(lb)))
+                        # TODO: display CHANGELOG diff
 
             #for c in Commit.iter_items(role.repo, "{}..HEAD".format(role.remoteBranch())):
             #    print(c.summary)
