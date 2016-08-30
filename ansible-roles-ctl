@@ -100,7 +100,7 @@ class AnsibleRole(GalaxyRole):
     def commitsBehind(self):
         return Commit.iter_items(self.repo, "HEAD..{}".format(self.remoteBranch()))
 
-def load_deps():
+def load_deps(args):
     try:
         stream = open("requirements.yml", "r")
     except Exception as e:
@@ -121,14 +121,22 @@ def load_deps():
     for dep in required_roles:
         role_info = RoleRequirement.role_yaml_parse(dep)
         role = AnsibleRole(**role_info)
+
+        if hasattr(args, 'roles') and args.roles and role.name not in args.roles:
+            continue
+
         if not role.isValid():
             continue
+
         role_list[role.name] = role
 
     return role_list
 
 def action_status(dep_list, args):
     for role_name in sorted(dep_list.keys()):
+        if args.roles and role_name not in args.roles:
+            continue
+
         role = dep_list[role_name]
 
         if role.exists:
@@ -178,11 +186,12 @@ parser = argparse.ArgumentParser(description='Manage roles installation')
 subparsers = parser.add_subparsers(help='sub-command help')
 parser_status = subparsers.add_parser('status', help='inform about roles installation status')
 parser_status.set_defaults(func=action_status)
+parser_status.add_argument('roles', nargs='*', help='limit command to this list of roles')
 
 # let's parse
 args = parser.parse_args()
 # load user config
-dep_list = load_deps()
+dep_list = load_deps(args)
 
 # action!
 if hasattr(args, 'func'):
