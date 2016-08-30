@@ -22,6 +22,8 @@ class GalaxyDefaultOptions:
 # reusing GalaxyRole initialization to obtain name and path properly
 class AnsibleRole(GalaxyRole):
 
+    tag_version_regex = "^v(?P<version>\d+\.\d+\.(\d+)?)$"
+
     def __init__(self, **role):
         galaxy = Galaxy(GalaxyDefaultOptions())
         super(AnsibleRole, self).__init__(galaxy, **role)
@@ -79,7 +81,7 @@ class AnsibleRole(GalaxyRole):
 
         # TODO: check if the local version match the configured one
         self.version_commit = None
-        if re.match("^v\d+\.\d+\.(\d+)?$", self.version):
+        if re.match(self.tag_version_regex, self.version):
             try:
                 self.version_commit = self.repo.tags[self.version].commit
             except ValueError as e:
@@ -99,6 +101,15 @@ class AnsibleRole(GalaxyRole):
 
     def commitsBehind(self):
         return Commit.iter_items(self.repo, "HEAD..{}".format(self.remoteBranch()))
+
+    def versionTags(self):
+        list = {}
+        for t in self.repo.tags:
+            m = re.match(self.tag_version_regex, t.name)
+            if m:
+                #list[t.commit.hexsha] = m.group('version')
+                list[t.commit] = m.group('version')
+        return list
 
 def load_deps(args):
     try:
@@ -132,6 +143,28 @@ def load_deps(args):
 
     return role_list
 
+def display_changelog(commit, new_versions):
+    try:
+        changelog = commit.tree['CHANGELOG.yml']
+    except Exception as e:
+        print("  no changelog file ('CHANGELOG.yml') could be found")
+        return
+
+    try:
+        changelog_entries = yaml.safe_load(changelog.data_stream)
+    except Exception as e:
+        print("  changelog file ('CHANGELOG.yml') could not be parsed")
+        return
+
+    print("  changelog:")
+    for version in sorted(new_versions):
+        if version in changelog_entries:
+            print("    {}:".format(version))
+            for entry in changelog_entries[version]:
+                print("      - {}".format(entry))
+        else:
+            print("    {}: changelog entry is missing for this version".format(v))
+
 def action_status(dep_list, args):
     for role_name in sorted(dep_list.keys()):
         if args.roles and role_name not in args.roles:
@@ -156,6 +189,17 @@ def action_status(dep_list, args):
                 else:
                     print("  is targeting version '{}' but repository do not match".format(role.version))
 
+                all_tags = role.versionTags()
+                new_versions = []
+                for commit in role.commitsBehind():
+                    if commit in all_tags:
+                        new_versions.append(all_tags[commit])
+
+                if new_versions:
+                    print("  has new version(s) available: {}".format(", ".join(new_versions)))
+                    if args.changelog:
+                        display_changelog(commit, new_versions)
+
             else:
                 print("  using branch '{}'".format(role.localBranch().name))
 
@@ -174,9 +218,6 @@ def action_status(dep_list, args):
                         print("  has {} commits behind".format(len(lb)))
                         # TODO: display CHANGELOG diff
 
-            #for c in Commit.iter_items(role.repo, "{}..HEAD".format(role.remoteBranch())):
-            #    print(c.summary)
-
         else:
             print("role '{}' is missing".format(role.name))
 
@@ -186,6 +227,7 @@ parser = argparse.ArgumentParser(description='Manage roles installation')
 subparsers = parser.add_subparsers(help='sub-command help')
 parser_status = subparsers.add_parser('status', help='inform about roles installation status')
 parser_status.set_defaults(func=action_status)
+parser_status.add_argument('--changelog', '-c', action='store_true', help='display changelog entries for new versions')
 parser_status.add_argument('roles', nargs='*', help='limit command to this list of roles')
 
 # let's parse
