@@ -224,6 +224,7 @@ def action_status(dep_list, args):
 
 # declare available subcommands and options
 parser = argparse.ArgumentParser(description='Manage roles installation')
+parser.add_argument('--version', action='version', version='%(prog)s 0.0.1')
 subparsers = parser.add_subparsers(help='sub-command help')
 parser_status = subparsers.add_parser('status', help='inform about roles installation status')
 parser_status.set_defaults(func=action_status)
