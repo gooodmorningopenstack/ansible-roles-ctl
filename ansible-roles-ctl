@@ -30,9 +30,8 @@ class AnsibleRole(GalaxyRole):
         galaxy = Galaxy(GalaxyDefaultOptions())
         super(AnsibleRole, self).__init__(galaxy, **role)
 
-        self.exists = os.path.exists(self.path)
         self.repo = None
-        if self.exists:
+        if self.isInstalled():
             try:
                 self.repo = Repo(self.path)
             except Exception as e:
@@ -41,6 +40,9 @@ class AnsibleRole(GalaxyRole):
         # if no version specified, then master is considered default
         if not self.version:
             self.version = 'master'
+
+    def isInstalled(self):
+        return os.path.exists(self.path)
 
     def localBranch(self):
         return self.repo.head.reference
@@ -75,7 +77,7 @@ class AnsibleRole(GalaxyRole):
             return False
 
         # if role is not installed yet, then skip following tests
-        if not self.exists:
+        if not self.isInstalled():
             return True
 
         if not self.repo:
@@ -121,9 +123,8 @@ class AnsibleRole(GalaxyRole):
         return list
 
     def uninstall(self):
-        # TODO: make self.exists dynamic
-        #if not self.exists:
-        #    return
+        if not self.isInstalled():
+            return
 
         shutil.rmtree(self.path)
 
@@ -209,7 +210,7 @@ def action_status(dep_list, args):
 
         role = dep_list[role_name]
 
-        if role.exists:
+        if role.isInstalled():
             print("role '{}' is properly installed".format(role.name))
 
             if role.repo.is_dirty():
@@ -265,7 +266,7 @@ def action_install(dep_list, args):
 
         role = dep_list[role_name]
 
-        if role.exists:
+        if role.isInstalled():
             print("role '{}' is already installed".format(role.name))
 
         else:
