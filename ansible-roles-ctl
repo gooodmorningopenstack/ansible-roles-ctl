@@ -90,7 +90,6 @@ class AnsibleRole(GalaxyRole):
             print("role '{}' is on a local branch (no corresponding remote branch), skipping".format(self.name))
             return False
 
-        # TODO: check if the local version match the configured one
         self.version_commit = None
         if self.isTargetingTag():
             try:
