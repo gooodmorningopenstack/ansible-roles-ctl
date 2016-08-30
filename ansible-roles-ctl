@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import argparse
 import yaml
 import os.path
 import re
+import shutil
 import ansible.constants as C
 from ansible.galaxy import Galaxy
 from ansible.playbook.role.requirement import RoleRequirement
@@ -29,11 +31,12 @@ class AnsibleRole(GalaxyRole):
         super(AnsibleRole, self).__init__(galaxy, **role)
 
         self.exists = os.path.exists(self.path)
+        self.repo = None
         if self.exists:
             try:
                 self.repo = Repo(self.path)
             except Exception as e:
-                self.repo = None
+                pass
 
         # if no version specified, then master is considered default
         if not self.version:
@@ -56,6 +59,12 @@ class AnsibleRole(GalaxyRole):
             return ref
 
         return None
+
+    def isTargetingTag(self):
+        if re.match(self.tag_version_regex, self.version):
+            return True
+        else:
+            return False
 
     def isValid(self):
         if self.scm and self.scm != 'git':
@@ -81,7 +90,7 @@ class AnsibleRole(GalaxyRole):
 
         # TODO: check if the local version match the configured one
         self.version_commit = None
-        if re.match(self.tag_version_regex, self.version):
+        if self.isTargetingTag():
             try:
                 self.version_commit = self.repo.tags[self.version].commit
             except ValueError as e:
@@ -110,6 +119,34 @@ class AnsibleRole(GalaxyRole):
                 #list[t.commit.hexsha] = m.group('version')
                 list[t.commit] = m.group('version')
         return list
+
+    def uninstall(self):
+        # TODO: make self.exists dynamic
+        #if not self.exists:
+        #    return
+
+        shutil.rmtree(self.path)
+
+    def install(self):
+        if self.repo:
+            print("role '{}' is already installed".format(self.name))
+            return
+
+        self.repo = Repo.clone_from(self.src, self.path)
+
+        if self.isTargetingTag():
+            if self.version in self.repo.tags:
+                self.repo.tags[self.version].checkout
+            else:
+                self.uninstall()
+                raise ValueError("role '{}' is setup to target version '{}', but it does not exist".format(self.name, self.version))
+
+        else:
+            if self.version in self.repo.heads:
+                self.repo.heads[self.version].checkout
+            else:
+                self.uninstall()
+                raise ValueError("role '{}' is setup to follow branch '{}', but it does not exist".format(self.name, self.version))
 
 def load_deps(args):
     try:
@@ -221,6 +258,24 @@ def action_status(dep_list, args):
         else:
             print("role '{}' is missing".format(role.name))
 
+def action_install(dep_list, args):
+    for role_name in sorted(dep_list.keys()):
+        if args.roles and role_name not in args.roles:
+            continue
+
+        role = dep_list[role_name]
+
+        if role.exists:
+            print("role '{}' is already installed".format(role.name))
+
+        else:
+            print("role '{}' is being installed…".format(role.name))
+            try:
+                role.install()
+                print("  done")
+            except Exception as e:
+                print("  failed: {}".format(e))
+
 
 # declare available subcommands and options
 parser = argparse.ArgumentParser(description='Manage roles installation')
@@ -230,6 +285,9 @@ parser_status = subparsers.add_parser('status', help='inform about roles install
 parser_status.set_defaults(func=action_status)
 parser_status.add_argument('--changelog', '-c', action='store_true', help='display changelog entries for new versions')
 parser_status.add_argument('roles', nargs='*', help='limit command to this list of roles')
+parser_install = subparsers.add_parser('install', help='install roles')
+parser_install.set_defaults(func=action_install)
+parser_install.add_argument('roles', nargs='*', help='limit command to this list of roles')
 
 # let's parse
 args = parser.parse_args()
