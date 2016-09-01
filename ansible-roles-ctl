@@ -45,9 +45,15 @@ class AnsibleRole(GalaxyRole):
         return os.path.exists(self.path)
 
     def localBranch(self):
+        if self.repo.head.is_detached:
+            return None
+
         return self.repo.head.reference
 
     def remoteBranch(self):
+        if self.repo.head.is_detached:
+            return None
+
         # used configured tracking branch if exist
         branch = self.localBranch().tracking_branch()
         if branch:
@@ -86,7 +92,7 @@ class AnsibleRole(GalaxyRole):
         if self.repo.bare:
             print("role '{}' is a bare repository, skipping".format(self.name))
             return False
-        if self.remoteBranch() is None:
+        if self.localBranch() is not None and self.remoteBranch() is None:
             print("role '{}' is on a local branch (no corresponding remote branch), skipping".format(self.name))
             return False
 
@@ -97,6 +103,10 @@ class AnsibleRole(GalaxyRole):
             except ValueError as e:
                 print("role '{}' is targeting an unexisting version ({}), skipping".format(self.name, self.version))
                 return False
+        elif self.localBranch() is None:
+            print("role '{}' is on a detached commit which does not match a version tag".format(self.name))
+            return False
+
         elif self.localBranch().name != self.version:
             print("role '{}' is not following the branch defined in requirements, skipping".format(self.name))
             return False
@@ -107,9 +117,15 @@ class AnsibleRole(GalaxyRole):
         self.repo.remotes.origin.fetch()
 
     def commitsAhead(self):
+        if self.repo.head.is_detached:
+            return []
+
         return Commit.iter_items(self.repo, "{}..HEAD".format(self.remoteBranch()))
 
     def commitsBehind(self):
+        if self.repo.head.is_detached:
+            return []
+
         return Commit.iter_items(self.repo, "HEAD..{}".format(self.remoteBranch()))
 
     def versionTags(self):
@@ -217,30 +233,35 @@ def action_status(dep_list, args):
 
             role.fetchUpdates()
 
-            local_commit = role.localBranch().commit
-            remote_commit = role.remoteBranch().commit
+            if role.version_commit or role.localBranch() is None:
+                all_tags = role.versionTags()
 
-            if role.version_commit:
-                if role.localBranch().commit == role.version_commit:
+                if role.version_commit:
                     print("  is at version '{}'".format(role.version))
                 else:
-                    print("  is targeting version '{}' but repository do not match".format(role.version))
+                    if self.head.commit in all_tags:
+                        print("  is targeting version '{}' but repository is at version '{}'".format(role.version, all_tags[self.head.commit]))
+                    else:
+                        print("  is at a commit which corresponds to no known version")
 
-                all_tags = role.versionTags()
-                new_versions = []
-                for commit in role.commitsBehind():
-                    if commit in all_tags:
-                        new_versions.append(all_tags[commit])
+                if role.localBranch() is None:
+                    print("  is detached from a branch, cannot check for new versions")
 
-                if new_versions:
-                    print("  has new version(s) available: {}".format(", ".join(new_versions)))
-                    if args.changelog:
-                        display_changelog(commit, new_versions)
+                else:
+                    new_versions = []
+                    for commit in role.commitsBehind():
+                        if commit in all_tags:
+                            new_versions.append(all_tags[commit])
+
+                    if new_versions:
+                        print("  has new version(s) available: {}".format(", ".join(new_versions)))
+                        if args.changelog:
+                            display_changelog(commit, new_versions)
 
             else:
                 print("  using branch '{}'".format(role.localBranch().name))
 
-                if local_commit == remote_commit:
+                if role.localBranch().commit == role.remoteBranch().commit:
                     print("  is up-to-date with origin")
 
                 else:
