@@ -145,7 +145,7 @@ class AnsibleRole(GalaxyRole):
         shutil.rmtree(self.path)
 
     def install(self):
-        if self.repo:
+        if self.isInstalled():
             return False
 
         self.repo = Repo.clone_from(self.src, self.path)
