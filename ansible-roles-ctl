@@ -83,7 +83,7 @@ class AnsibleRole(GalaxyRole):
 
         return None
 
-    def isTargetingTag(self):
+    def isTargetingVersionTag(self):
         if re.match(self.tag_version_regex, self.version):
             return True
         else:
@@ -107,7 +107,7 @@ class AnsibleRole(GalaxyRole):
             raise InvalidAnsibleRole("on a local branch '{}' (no corresponding remote branch)".format(self.localBranch().name))
 
         self.version_commit = None
-        if self.isTargetingTag():
+        if self.isTargetingVersionTag():
             try:
                 self.version_commit = self.repo.tags[self.version].commit
             except ValueError as e:
@@ -160,7 +160,7 @@ class AnsibleRole(GalaxyRole):
 
         self.repo = Repo.clone_from(self.src, self.path)
 
-        if self.isTargetingTag():
+        if self.isTargetingVersionTag():
             if self.version in self.repo.tags:
                 self.repo.tags[self.version].checkout
             else:
