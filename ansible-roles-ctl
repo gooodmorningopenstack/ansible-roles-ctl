@@ -305,10 +305,10 @@ def action_status(dep_list, selected_roles, args):
                     if la and lb:
                         print("  has diverged from origin")
                     if la:
-                        print("  has {} commits ahead".format(len(la)))
+                        print("  is {} commits ahead".format(len(la)))
                         # TODO: display CHANGELOG diff
                     if lb:
-                        print("  has {} commits behind".format(len(lb)))
+                        print("  is {} commits behind".format(len(lb)))
                         # TODO: display CHANGELOG diff
 
         else:
