@@ -13,6 +13,12 @@ from ansible.galaxy.role import GalaxyRole
 from git import Repo,Commit
 
 
+class AnsibleRolesCtlException(Exception):
+    """AnsibleRolesCtl exceptions"""
+
+class InvalidAnsibleRole(AnsibleRolesCtlException):
+    """Ansible role is in an unusable state"""
+
 # reusing default options from the CLI.
 # there is no way to get them properly because it is merged with the
 # CLI parser.
@@ -74,44 +80,36 @@ class AnsibleRole(GalaxyRole):
         else:
             return False
 
-    def isValid(self):
+    def testValid(self):
         if self.scm and self.scm != 'git':
-            print("role '{}' is using an unsupported SCM, skipping".format(self.name))
-            return False
+            raise InvalidAnsibleRole("using an unsupported SCM")
         if not re.search("https?://", self.src):
-            print("role '{}' is from Ansible Galaxy, skipping".format(self.name))
-            return False
+            raise InvalidAnsibleRole("from Ansible Galaxy")
 
         # if role is not installed yet, then skip following tests
         if not self.isInstalled():
-            return True
+            return
 
         if not self.repo:
-            print("role '{}' is not a valid SCM directory, skipping".format(self.name))
-            return False
+            raise InvalidAnsibleRole("not a valid SCM directory")
         if self.repo.bare:
-            print("role '{}' is a bare repository, skipping".format(self.name))
-            return False
+            raise InvalidAnsibleRole("bare repository")
         if self.localBranch() is not None and self.remoteBranch() is None:
-            print("role '{}' is on a local branch '{}' (no corresponding remote branch), skipping".format(self.name, self.localBranch().name))
-            return False
+            raise InvalidAnsibleRole("on a local branch '{}' (no corresponding remote branch)".format(self.localBranch().name))
 
         self.version_commit = None
         if self.isTargetingTag():
             try:
                 self.version_commit = self.repo.tags[self.version].commit
             except ValueError as e:
-                print("role '{}' is targeting an unexisting version ({}), skipping".format(self.name, self.version))
-                return False
+                raise InvalidAnsibleRole("targeting an unexisting version ({})".format(self.version))
         elif self.localBranch() is None:
-            print("role '{}' is on a detached commit which does not match a version tag".format(self.name))
-            return False
+            raise InvalidAnsibleRole("on a detached commit which does not match a version tag")
 
         elif self.localBranch().name != self.version:
-            print("role '{}' is following branch '{}' but not the requirements ({}), skipping".format(self.name, self.localBranch().name, self.version))
-            return False
+            raise InvalidAnsibleRole("following branch '{}' but not the requirements ({})".format(self.localBranch().name, self.version))
 
-        return True
+        return
 
     def fetchUpdates(self):
         self.repo.remotes.origin.fetch()
@@ -199,7 +197,7 @@ class AnsibleRole(GalaxyRole):
 
         return True
 
-def load_deps(selected_roles=[]):
+def load_deps(selected_roles, args):
     try:
         stream = open("requirements.yml", "r")
     except Exception as e:
@@ -224,7 +222,11 @@ def load_deps(selected_roles=[]):
         if selected_roles and role.name not in selected_roles:
             continue
 
-        if not role.isValid():
+        try:
+            role.testValid()
+        except InvalidAnsibleRole, e:
+            if not args.quiet:
+                print("role '{}' is invalid: {}".format(role.name, e.message))
             continue
 
         role_list[role.name] = role
@@ -362,6 +364,7 @@ def action_update(dep_list, selected_roles, args):
 # declare available subcommands and options
 parser = argparse.ArgumentParser(description='Manage roles installation')
 parser.add_argument('--version', action='version', version='%(prog)s 0.0.1')
+parser.add_argument('--quiet', '-q', action='store_true', help='less verbose display')
 subparsers = parser.add_subparsers(help='sub-command help')
 parser_status = subparsers.add_parser('status', help='inform about roles installation status')
 parser_status.set_defaults(func=action_status)
@@ -381,7 +384,7 @@ args = parser.parse_args()
 selected_roles = []
 if hasattr(args, 'roles'):
     selected_roles = map(lambda i: i.split("=")[0], args.roles)
-dep_list = load_deps(selected_roles)
+dep_list = load_deps(selected_roles, args)
 
 # action!
 if hasattr(args, 'func'):
