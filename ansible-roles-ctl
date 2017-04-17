@@ -208,7 +208,7 @@ class AnsibleRole(GalaxyRole):
         return True
 
     def update(self, new_target_version=None):
-        if not self.repo:
+        if not self.isInstalled():
             raise InvalidAnsibleRole("not yet installed")
 
         if self.repo.is_dirty():
