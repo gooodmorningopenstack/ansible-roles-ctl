@@ -22,6 +22,9 @@ class InvalidAnsibleRole(AnsibleRolesCtlException):
 class NonExistingAnsibleRoleTarget(AnsibleRolesCtlException):
     """Ansible role is setup to target a non-existing tag or branch"""
 
+class ReqOffAnsibleRole(AnsibleRolesCtlException):
+    """Ansible role is setup to target a non-existing tag or branch"""
+
 # reusing default options from the CLI.
 # there is no way to get them properly because it is merged with the
 # CLI parser.
@@ -111,18 +114,30 @@ class AnsibleRole(GalaxyRole):
             try:
                 self.version_commit = self.repo.tags[self.version].commit
             except ValueError as e:
-                raise InvalidAnsibleRole("targeting an unexisting version ({})".format(self.version))
+                raise NonExistingAnsibleRoleTarget("targeting an unexisting version ({})".format(self.version))
+
+        return
+
+    def testRequirements(self):
+        if self.isTargetingVersionTag():
+            if self.repo.head.commit != self.version_commit:
+                version = self.localVersion()
+                if version:
+                    raise ReqOffAnsibleRole("on version '{}' but not the requirements (version '{}')".format(version, self.version))
+                elif self.localBranch() is not None:
+                    raise ReqOffAnsibleRole("on branch '{}' but not the requirements (version '{}')".format(self.localBranch().name, self.version))
+                else:
+                    raise ReqOffAnsibleRole("on a detached commit but not the requirements (version '{}')".format(self.version))
+
         elif self.localBranch() is None:
             version = self.localVersion()
             if version:
-                raise InvalidAnsibleRole("on version '{}' but not the requirements ({})".format(version, self.version))
+                raise ReqOffAnsibleRole("on version '{}' but not the requirements (branch '{}')".format(version, self.version))
             else:
-                raise InvalidAnsibleRole("on a detached commit which does not match a version tag")
+                raise ReqOffAnsibleRole("on a detached commit but not the requirements (branch '{}')".format(self.version))
 
         elif self.localBranch().name != self.version:
-            raise InvalidAnsibleRole("following branch '{}' but not the requirements ({})".format(self.localBranch().name, self.version))
-
-        return
+            raise ReqOffAnsibleRole("on branch '{}' but not the requirements (branch '{}')".format(self.localBranch().name, self.version))
 
     def fetchUpdates(self):
         self.repo.remotes.origin.fetch()
@@ -147,6 +162,22 @@ class AnsibleRole(GalaxyRole):
                 #list[t.commit.hexsha] = m.group('version')
                 list[t.commit] = m.group('version')
         return list
+
+    def newVersions(self):
+        if self.localBranch() is not None:
+            all_tags = self.versionTags()
+
+            new_versions = []
+            for commit in self.commitsBehind():
+                if commit in all_tags:
+                    new_versions.append(all_tags[commit])
+            return sorted(new_versions)
+
+        version = self.localVersion()
+        if version:
+            return sorted([x for x in self.versionTags().values() if x > version])
+
+        return []
 
     def uninstall(self):
         if not self.isInstalled():
@@ -276,60 +307,45 @@ def action_status(dep_list, selected_roles, args):
 
         role = dep_list[role_name]
 
-        if role.isInstalled():
-            print("role '{}' is properly installed".format(role.name)),
+        if not role.isInstalled():
+            print("role '{}' is not installed".format(role.name))
+            continue
 
-            role.fetchUpdates()
+        type = "version" if role.isTargetingVersionTag() else "branch"
+        print("role '{}' is properly installed, targeting {} '{}'".format(role.name, type, role.version))
 
-            if role.version_commit or role.localBranch() is None:
-                all_tags = role.versionTags()
+        role.fetchUpdates()
 
-                if role.version_commit:
-                    print("at version '{}'".format(role.version))
-                else:
-                    print
-                    if self.head.commit in all_tags:
-                        print("  is targeting version '{}' but repository is at version '{}'".format(role.version, all_tags[self.head.commit]))
-                    else:
-                        print("  is at a commit which corresponds to no known version")
+        try:
+            role.testRequirements()
+        except Exception as e:
+            print("  is off target: {}".format(e))
 
-                if role.localBranch() is None:
-                    print("  is detached from a branch, cannot check for new versions")
-
-                else:
-                    new_versions = []
-                    for commit in role.commitsBehind():
-                        if commit in all_tags:
-                            new_versions.append(all_tags[commit])
-
-                    if new_versions:
-                        print("  has new version(s) available: {}".format(", ".join(new_versions)))
-                        if args.changelog:
-                            display_changelog(commit, new_versions)
-
-                if role.repo.is_dirty():
-                    print("  has local changes (please commit or cleanup)".format(role.name))
+        if role.localBranch() is not None:
+            if role.localBranch().commit == role.remoteBranch().commit:
+                print("  is up-to-date with origin")
 
             else:
-                print("using branch '{}'".format(role.localBranch().name))
+                la = list(role.commitsAhead())
+                lb = list(role.commitsBehind())
+                if la and lb:
+                    print("  has diverged from origin")
+                if la:
+                    print("  is {} commits ahead origin".format(len(la)))
+                    # TODO: display CHANGELOG diff
+                if lb:
+                    print("  is {} commits behind origin".format(len(lb)))
+                    # TODO: display CHANGELOG diff
 
-                if role.localBranch().commit == role.remoteBranch().commit:
-                    print("  is up-to-date with origin")
+        new_versions = role.newVersions()
+        if new_versions:
+            print("  has new version(s) available: {}".format(", ".join(new_versions)))
+            if args.changelog:
+                commit = role.repo.tags["v{}".format(new_versions[-1])]
+                display_changelog(commit, new_versions)
 
-                else:
-                    la = list(role.commitsAhead())
-                    lb = list(role.commitsBehind())
-                    if la and lb:
-                        print("  has diverged from origin")
-                    if la:
-                        print("  is {} commits ahead".format(len(la)))
-                        # TODO: display CHANGELOG diff
-                    if lb:
-                        print("  is {} commits behind".format(len(lb)))
-                        # TODO: display CHANGELOG diff
-
-        else:
-            print("role '{}' is missing".format(role.name))
+        if role.repo.is_dirty():
+            print("  contains local changes (please commit, stash or cleanup)".format(role.name))
 
 def action_install(dep_list, selected_roles, args):
     for role_name in sorted(dep_list.keys()):
