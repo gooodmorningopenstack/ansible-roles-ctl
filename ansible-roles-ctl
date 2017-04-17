@@ -168,20 +168,17 @@ class AnsibleRole(GalaxyRole):
 
     def update(self, new_target_version=None):
         if not self.repo:
-            print("role '{}' is not yet installed".format(self.name))
-            return False
+            raise InvalidAnsibleRole("not yet installed")
 
         if self.repo.is_dirty():
-            print("role '{}' has local changes (please commit or cleanup)".format(role.name))
-            return False
+            raise InvalidAnsibleRole("has local changes (please commit or cleanup)")
 
         self.fetchUpdates()
 
         if new_target_version:
             new_target_tag = "v{}".format(new_target_version)
             if new_target_tag not in self.repo.tags:
-                print("role '{}' cannot be upgraded to nonexisting version '{}'".format(self.name, new_target_version))
-                return False
+                raise NonExistingAnsibleRoleTarget("cannot be upgraded to nonexisting version '{}'".format(new_target_version))
 
         else:
             all_tags = self.versionTags()
@@ -190,7 +187,6 @@ class AnsibleRole(GalaxyRole):
                     new_target_version = all_tags[commit]
 
             if not new_target_version:
-                print("role '{}' is already at the latest version".format(self.name))
                 return False
 
             new_target_tag = "v{}".format(new_target_version)
@@ -351,17 +347,20 @@ def action_update(dep_list, selected_roles, args):
 
         role = dep_list[role_name]
 
-        if role.isInstalled():
-            new_target_version = None
-            if role.name in selected_versions:
-                new_target_version = selected_versions[role.name]
+        new_target_version = None
+        if role.name in selected_versions:
+            new_target_version = selected_versions[role.name]
 
+        try:
             if role.update(new_target_version):
-                pass
                 # TODO: update requirements.yml
+                if not args.quiet:
+                    print("role '{}' has been updated".format(role.name))
+            else:
+                print("role '{}' is already updated to target".format(role.name))
+        except Exception as e:
+            print("role '{}' update failed: {}".format(role.name, e))
 
-        else:
-            print("role '{}' is not yet installed".format(role.name))
 
 
 # declare available subcommands and options
