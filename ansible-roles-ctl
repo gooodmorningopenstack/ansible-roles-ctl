@@ -93,7 +93,7 @@ class AnsibleRole(GalaxyRole):
             print("role '{}' is a bare repository, skipping".format(self.name))
             return False
         if self.localBranch() is not None and self.remoteBranch() is None:
-            print("role '{}' is on a local branch (no corresponding remote branch), skipping".format(self.name))
+            print("role '{}' is on a local branch '{}' (no corresponding remote branch), skipping".format(self.name, self.localBranch().name))
             return False
 
         self.version_commit = None
@@ -108,7 +108,7 @@ class AnsibleRole(GalaxyRole):
             return False
 
         elif self.localBranch().name != self.version:
-            print("role '{}' is not following the branch defined in requirements, skipping".format(self.name))
+            print("role '{}' is following branch '{}' but not the requirements ({}), skipping".format(self.name, self.localBranch().name, self.version))
             return False
 
         return True
