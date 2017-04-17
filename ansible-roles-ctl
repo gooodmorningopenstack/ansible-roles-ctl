@@ -107,7 +107,8 @@ class AnsibleRole(GalaxyRole):
             except ValueError as e:
                 raise InvalidAnsibleRole("targeting an unexisting version ({})".format(self.version))
         elif self.localBranch() is None:
-            raise InvalidAnsibleRole("on a detached commit which does not match a version tag")
+            if self.repo.head.commit not in self.versionTags():
+                raise InvalidAnsibleRole("on a detached commit which does not match a version tag")
 
         elif self.localBranch().name != self.version:
             raise InvalidAnsibleRole("following branch '{}' but not the requirements ({})".format(self.localBranch().name, self.version))
