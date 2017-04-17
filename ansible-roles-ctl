@@ -191,6 +191,10 @@ class AnsibleRole(GalaxyRole):
 
             new_target_tag = "v{}".format(new_target_version)
 
+        # already at target
+        if self.repo.tags[new_target_tag].commit == self.repo.head.reference.commit:
+            return False
+
         self.repo.head.reference = new_target_tag
         self.repo.head.reset(index=True, working_tree=True)
         self.version = new_target_tag
