@@ -330,10 +330,10 @@ def action_status(dep_list, selected_roles, args):
                 lb = list(role.commitsBehind())
                 if la and lb:
                     print("  has diverged from origin")
-                if la:
+                elif la:
                     print("  is {} commits ahead origin".format(len(la)))
                     # TODO: display CHANGELOG diff
-                if lb:
+                elif lb:
                     print("  is {} commits behind origin".format(len(lb)))
                     # TODO: display CHANGELOG diff
 
