@@ -261,10 +261,7 @@ def action_status(dep_list, selected_roles, args):
         role = dep_list[role_name]
 
         if role.isInstalled():
-            print("role '{}' is properly installed".format(role.name))
-
-            if role.repo.is_dirty():
-                print("  has local changes (please commit or cleanup)".format(role.name))
+            print("role '{}' is properly installed".format(role.name)),
 
             role.fetchUpdates()
 
@@ -272,8 +269,9 @@ def action_status(dep_list, selected_roles, args):
                 all_tags = role.versionTags()
 
                 if role.version_commit:
-                    print("  is at version '{}'".format(role.version))
+                    print("at version '{}'".format(role.version))
                 else:
+                    print
                     if self.head.commit in all_tags:
                         print("  is targeting version '{}' but repository is at version '{}'".format(role.version, all_tags[self.head.commit]))
                     else:
@@ -293,8 +291,11 @@ def action_status(dep_list, selected_roles, args):
                         if args.changelog:
                             display_changelog(commit, new_versions)
 
+                if role.repo.is_dirty():
+                    print("  has local changes (please commit or cleanup)".format(role.name))
+
             else:
-                print("  using branch '{}'".format(role.localBranch().name))
+                print("using branch '{}'".format(role.localBranch().name))
 
                 if role.localBranch().commit == role.remoteBranch().commit:
                     print("  is up-to-date with origin")
