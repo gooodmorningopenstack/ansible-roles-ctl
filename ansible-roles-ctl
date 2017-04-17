@@ -59,6 +59,12 @@ class AnsibleRole(GalaxyRole):
 
         return self.repo.head.reference
 
+    def localVersion(self):
+        try:
+            return self.versionTags()[self.repo.head.commit]
+        except:
+            return None
+
     def remoteBranch(self):
         if self.repo.head.is_detached:
             return None
@@ -107,7 +113,10 @@ class AnsibleRole(GalaxyRole):
             except ValueError as e:
                 raise InvalidAnsibleRole("targeting an unexisting version ({})".format(self.version))
         elif self.localBranch() is None:
-            if self.repo.head.commit not in self.versionTags():
+            version = self.localVersion()
+            if version:
+                raise InvalidAnsibleRole("on version '{}' but not the requirements ({})".format(version, self.version))
+            else:
                 raise InvalidAnsibleRole("on a detached commit which does not match a version tag")
 
         elif self.localBranch().name != self.version:
