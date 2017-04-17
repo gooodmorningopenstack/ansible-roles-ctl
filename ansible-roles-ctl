@@ -33,7 +33,7 @@ class GalaxyDefaultOptions:
 # reusing GalaxyRole initialization to obtain name and path properly
 class AnsibleRole(GalaxyRole):
 
-    tag_version_regex = "^v(?P<version>\d+\.\d+\.(\d+)?)$"
+    tag_version_regex = "^v(?P<version>\d+\.\d+(\.\d+)?)$"
 
     def __init__(self, **role):
         galaxy = Galaxy(GalaxyDefaultOptions())
