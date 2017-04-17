@@ -19,6 +19,9 @@ class AnsibleRolesCtlException(Exception):
 class InvalidAnsibleRole(AnsibleRolesCtlException):
     """Ansible role is in an unusable state"""
 
+class NonExistingAnsibleRoleTarget(AnsibleRolesCtlException):
+    """Ansible role is setup to target a non-existing tag or branch"""
+
 # reusing default options from the CLI.
 # there is no way to get them properly because it is merged with the
 # CLI parser.
@@ -143,8 +146,7 @@ class AnsibleRole(GalaxyRole):
 
     def install(self):
         if self.repo:
-            print("role '{}' is already installed".format(self.name))
-            return
+            return False
 
         self.repo = Repo.clone_from(self.src, self.path)
 
@@ -153,14 +155,16 @@ class AnsibleRole(GalaxyRole):
                 self.repo.tags[self.version].checkout
             else:
                 self.uninstall()
-                raise ValueError("role '{}' is setup to target version '{}', but it does not exist".format(self.name, self.version))
+                raise NonExistingAnsibleRoleTarget("setup to target version '{}', but it does not exist".format(self.version))
 
         else:
             if self.version in self.repo.heads:
                 self.repo.heads[self.version].checkout
             else:
                 self.uninstall()
-                raise ValueError("role '{}' is setup to follow branch '{}', but it does not exist".format(self.name, self.version))
+                raise NonExistingAnsibleRoleTarget("setup to follow branch '{}', but it does not exist".format(self.version))
+
+        return True
 
     def update(self, new_target_version=None):
         if not self.repo:
@@ -325,15 +329,16 @@ def action_install(dep_list, selected_roles, args):
         role = dep_list[role_name]
 
         if role.isInstalled():
-            print("role '{}' is already installed".format(role.name))
+            if not args.quiet:
+                print("role '{}' is already installed".format(role.name))
 
         else:
-            print("role '{}' is being installed…".format(role.name))
             try:
                 role.install()
-                print("  done")
+                if not args.quiet:
+                  print("role '{}' has been installed".format(role.name))
             except Exception as e:
-                print("  failesd: {}".format(e))
+                print("role '{}' installation failed: {}".format(role.name, e))
 
 def action_update(dep_list, selected_roles, args):
     selected_versions = {}
