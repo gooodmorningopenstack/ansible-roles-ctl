@@ -328,17 +328,15 @@ def action_install(dep_list, selected_roles, args):
 
         role = dep_list[role_name]
 
-        if role.isInstalled():
-            if not args.quiet:
-                print("role '{}' is already installed".format(role.name))
-
-        else:
-            try:
-                role.install()
+        try:
+            if role.install():
                 if not args.quiet:
-                  print("role '{}' has been installed".format(role.name))
-            except Exception as e:
-                print("role '{}' installation failed: {}".format(role.name, e))
+                    print("role '{}' has been installed".format(role.name))
+            else:
+                if not args.quiet:
+                    print("role '{}' is already installed".format(role.name))
+        except Exception as e:
+            print("role '{}' installation failed: {}".format(role.name, e))
 
 def action_update(dep_list, selected_roles, args):
     selected_versions = {}
