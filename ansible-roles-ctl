@@ -242,7 +242,7 @@ class AnsibleRole(GalaxyRole):
 
         return True
 
-def load_deps(selected_roles, args):
+def load_deps(args):
     try:
         stream = open("requirements.yml", "r")
     except Exception as e:
@@ -263,9 +263,6 @@ def load_deps(selected_roles, args):
     for dep in required_roles:
         role_info = RoleRequirement.role_yaml_parse(dep)
         role = AnsibleRole(**role_info)
-
-        if selected_roles and role.name not in selected_roles:
-            continue
 
         try:
             role.testValid()
@@ -364,12 +361,23 @@ def action_install(dep_list, selected_roles, args):
         except Exception as e:
             print("role '{}' installation failed: {}".format(role.name, e))
 
+def update_requirements(dep_list):
+    req_list = []
+    for role_name in sorted(dep_list.keys()):
+        role = dep_list[role_name]
+        req_list.append(role.spec)
+
+    with open("requirements.yml", 'w') as f:
+        yaml.safe_dump(req_list, f, default_flow_style=False)
+
 def action_update(dep_list, selected_roles, args):
     selected_versions = {}
     for role_name in args.roles:
         l = role_name.split("=")
         if len(l) > 1:
             selected_versions[l[0]] = l[1]
+
+    req_file_needs_update = False
 
     for role_name in sorted(dep_list.keys()):
         if selected_roles and role_name not in selected_roles:
@@ -383,13 +391,18 @@ def action_update(dep_list, selected_roles, args):
 
         try:
             if role.update(new_target_version):
-                # TODO: update requirements.yml
+                req_file_needs_update = True
                 if not args.quiet:
                     print("role '{}' has been updated".format(role.name))
             else:
                 print("role '{}' is already updated to target".format(role.name))
         except Exception as e:
             print("role '{}' update failed: {}".format(role.name, e))
+
+    if req_file_needs_update and args.req_update:
+        update_requirements(dep_list)
+        if not args.quiet:
+            print("requirements file has been updated, please check before commiting")
 
 
 
@@ -407,6 +420,7 @@ parser_install.set_defaults(func=action_install)
 parser_install.add_argument('roles', nargs='*', help='limit command to this list of roles')
 parser_update = subparsers.add_parser('update', help='update roles')
 parser_update.set_defaults(func=action_update)
+parser_update.add_argument('--req-update', '-r', action='store_true', help='update requirements file')
 parser_update.add_argument('roles', nargs='*', help='limit command to this list of roles; "role=<version>" syntax is possible to enforce a specific version')
 
 # let's parse
@@ -416,7 +430,7 @@ args = parser.parse_args()
 selected_roles = []
 if hasattr(args, 'roles'):
     selected_roles = map(lambda i: i.split("=")[0], args.roles)
-dep_list = load_deps(selected_roles, args)
+dep_list = load_deps(args)
 
 # action!
 if hasattr(args, 'func'):

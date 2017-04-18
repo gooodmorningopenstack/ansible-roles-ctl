@@ -60,6 +60,9 @@ requirements (downgrade is possible):
 
     ansible-roles-ctl update bind9=1.1
 
-**WARNING**: at the moment the requirements file is not yet updated by
-this script.
+The -r/--req-update option regenerates the requirements file according
+to the requested updates. You need to check the result before
+commiting; in particular, invalid roles cannot be loaded properly and
+would thus be skipped (we hope this limitation to be lifted in a future
+version).
 
