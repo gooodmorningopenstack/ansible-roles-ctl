@@ -191,6 +191,10 @@ class AnsibleRole(GalaxyRole):
 
         self.repo = Repo.clone_from(self.src, self.path)
 
+        # newly created empty repository
+        if not self.repo.remotes.origin.refs:
+            return True
+
         if self.isTargetingVersionTag():
             if self.version in self.repo.tags:
                 self.repo.tags[self.version].checkout
@@ -354,6 +358,8 @@ def action_install(dep_list, selected_roles, args):
         try:
             if role.install():
                 print("role '{}' has been installed".format(role.name))
+                if not role.repo.remotes.origin.refs:
+                    print("  is an empty repository")
             else:
                 if not args.quiet:
                     print("role '{}' is already installed".format(role.name))
