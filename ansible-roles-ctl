@@ -353,8 +353,7 @@ def action_install(dep_list, selected_roles, args):
 
         try:
             if role.install():
-                if not args.quiet:
-                    print("role '{}' has been installed".format(role.name))
+                print("role '{}' has been installed".format(role.name))
             else:
                 if not args.quiet:
                     print("role '{}' is already installed".format(role.name))
@@ -392,10 +391,10 @@ def action_update(dep_list, selected_roles, args):
         try:
             if role.update(new_target_version):
                 req_file_needs_update = True
-                if not args.quiet:
-                    print("role '{}' has been updated".format(role.name))
+                print("role '{}' has been updated".format(role.name))
             else:
-                print("role '{}' is already updated to target".format(role.name))
+                if not args.quiet:
+                    print("role '{}' is already updated to target".format(role.name))
         except Exception as e:
             print("role '{}' update failed: {}".format(role.name, e))
 
