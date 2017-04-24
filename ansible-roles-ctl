@@ -6,6 +6,7 @@ import yaml
 import os.path
 import re
 import shutil
+import time
 import ansible.constants as C
 from ansible.galaxy import Galaxy
 from ansible.playbook.role.requirement import RoleRequirement
@@ -333,10 +334,14 @@ def action_status(dep_list, selected_roles, args):
                     print("  has diverged from origin")
                 elif la:
                     print("  is {} commits ahead origin".format(len(la)))
-                    # TODO: display CHANGELOG diff
+                    if args.changelog:
+                        for commit in la:
+                            print("    {}:  {}".format(time.strftime("%Y-%m-%d %H:%M %Z", time.gmtime(commit.committed_date)), commit.summary))
                 elif lb:
-                    print("  is {} commits behind origin".format(len(lb)))
-                    # TODO: display CHANGELOG diff
+                    print("  is {} commits behind origin:".format(len(lb)))
+                    if args.changelog:
+                        for commit in lb:
+                            print("    {}:  {}".format(time.strftime("%Y-%m-%d %H:%M %Z", time.gmtime(commit.committed_date)), commit.summary))
 
         new_versions = role.newVersions()
         if new_versions:
