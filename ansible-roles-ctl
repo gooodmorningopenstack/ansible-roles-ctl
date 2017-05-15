@@ -313,45 +313,53 @@ def action_status(dep_list, selected_roles, args):
             print("role '{}' is not installed".format(role.name))
             continue
 
+        warning_msg = False
         type = "version" if role.isTargetingVersionTag() else "branch"
-        print("role '{}' is properly installed, targeting {} '{}'".format(role.name, type, role.version))
+        msg = "role '{}' is properly installed, targeting {} '{}'".format(role.name, type, role.version)
 
         role.fetchUpdates()
 
         try:
             role.testRequirements()
         except Exception as e:
-            print("  is off target: {}".format(e))
+            warning_msg = True
+            msg += "\n  is off target: {}".format(e)
 
         if role.localBranch() is not None:
             if role.localBranch().commit == role.remoteBranch().commit:
-                print("  is up-to-date with origin")
+                msg += "\n  is up-to-date with origin"
 
             else:
+                warning_msg = True
                 la = list(role.commitsAhead())
                 lb = list(role.commitsBehind())
                 if la and lb:
-                    print("  has diverged from origin")
+                    msg += "\n  has diverged from origin"
                 elif la:
-                    print("  is {} commits ahead origin".format(len(la)))
+                    msg += "\n  is {} commits ahead origin".format(len(la))
                     if args.changelog:
                         for commit in la:
-                            print("    {}:  {}".format(time.strftime("%Y-%m-%d %H:%M %Z", time.gmtime(commit.committed_date)), commit.summary))
+                            msg += "\n    {}:  {}".format(time.strftime("%Y-%m-%d %H:%M %Z", time.gmtime(commit.committed_date)), commit.summary)
                 elif lb:
-                    print("  is {} commits behind origin:".format(len(lb)))
+                    msg += "\n  is {} commits behind origin:".format(len(lb))
                     if args.changelog:
                         for commit in lb:
-                            print("    {}:  {}".format(time.strftime("%Y-%m-%d %H:%M %Z", time.gmtime(commit.committed_date)), commit.summary))
+                            msg += "\n    {}:  {}".format(time.strftime("%Y-%m-%d %H:%M %Z", time.gmtime(commit.committed_date)), commit.summary)
 
         new_versions = role.newVersions()
         if new_versions:
-            print("  has new version(s) available: {}".format(", ".join(new_versions)))
+            warning_msg = True
+            msg += "\n  has new version(s) available: {}".format(", ".join(new_versions))
             if args.changelog:
                 commit = role.repo.tags["v{}".format(new_versions[-1])]
                 display_changelog(commit, new_versions)
 
         if role.repo.is_dirty():
-            print("  contains local changes (please commit, stash or cleanup)".format(role.name))
+            warning_msg = True
+            msg += "\n  contains local changes (please commit, stash or cleanup)".format(role.name)
+
+        if selected_roles or warning_msg or not args.quiet:
+            print(msg)
 
 def action_install(dep_list, selected_roles, args):
     for role_name in sorted(dep_list.keys()):
