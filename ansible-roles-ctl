@@ -221,12 +221,14 @@ class AnsibleRole(GalaxyRole):
 
         self.fetchUpdates()
 
+        new_target_tag = None
+
         if new_target_version:
             new_target_tag = "v{}".format(new_target_version)
             if new_target_tag not in self.repo.tags:
                 raise NonExistingAnsibleRoleTarget("cannot be upgraded to nonexisting version '{}'".format(new_target_version))
 
-        else:
+        elif self.isTargetingVersionTag():
             all_tags = self.versionTags()
             for commit in self.commitsBehind():
                 if commit in all_tags:
@@ -237,13 +239,30 @@ class AnsibleRole(GalaxyRole):
 
             new_target_tag = "v{}".format(new_target_version)
 
-        # already at target
-        if self.repo.tags[new_target_tag].commit == self.repo.head.reference.commit:
-            return False
+        if new_target_tag:
+            # already at target
+            if self.repo.tags[new_target_tag].commit == self.repo.head.reference.commit:
+                return False
 
-        self.repo.head.reference = new_target_tag
-        self.repo.head.reset(index=True, working_tree=True)
-        self.version = new_target_tag
+            self.repo.head.reference = new_target_tag
+            self.repo.head.reset(index=True, working_tree=True)
+            self.version = new_target_tag
+
+        else:
+            la = list(self.commitsAhead())
+            lb = list(self.commitsBehind())
+
+            if la and lb:
+                raise NonExistingAnsibleRoleTarget("has diverged from origin")
+
+            if la:
+                raise NonExistingAnsibleRoleTarget("is ahead origin")
+
+            # already at target
+            if not lb:
+                return False
+
+            self.repo.remotes.origin.pull()
 
         return True
 
