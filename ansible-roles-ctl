@@ -249,6 +249,15 @@ class AnsibleRole(GalaxyRole):
             self.version = new_target_tag
 
         else:
+            updated = False
+
+            # if not on the right branch, then switch
+            if self.localBranch().name != self.version:
+                self.repo.create_head(self.version, self.repo.remotes.origin.refs[self.version])
+                self.repo.heads[self.version].set_tracking_branch(self.repo.remotes.origin.refs[self.version])
+                self.repo.heads[self.version].checkout()
+                updated = True
+
             la = list(self.commitsAhead())
             lb = list(self.commitsBehind())
 
@@ -260,7 +269,7 @@ class AnsibleRole(GalaxyRole):
 
             # already at target
             if not lb:
-                return False
+                return updated
 
             self.repo.remotes.origin.pull()
 
