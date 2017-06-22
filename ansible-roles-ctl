@@ -180,6 +180,18 @@ class AnsibleRole(GalaxyRole):
 
         return []
 
+    def hasRemoteBranch(self, branch):
+        try:
+            self.repo.remotes.origin.refs[branch]
+            return True
+        except Exception as e:
+            return False
+
+    def trackRemoteBranch(self, branch):
+        self.repo.create_head(branch, self.repo.remotes.origin.refs[branch])
+        self.repo.heads[branch].set_tracking_branch(self.repo.remotes.origin.refs[branch])
+        self.repo.heads[branch].checkout()
+
     def uninstall(self):
         if not self.isInstalled():
             return
@@ -204,8 +216,8 @@ class AnsibleRole(GalaxyRole):
                 raise NonExistingAnsibleRoleTarget("setup to target version '{}', but it does not exist".format(self.version))
 
         else:
-            if self.version in self.repo.heads:
-                self.repo.heads[self.version].checkout
+            if self.hasRemoteBranch(self.version):
+                self.trackRemoteBranch(self.version)
             else:
                 self.uninstall()
                 raise NonExistingAnsibleRoleTarget("setup to follow branch '{}', but it does not exist".format(self.version))
@@ -253,9 +265,7 @@ class AnsibleRole(GalaxyRole):
 
             # if not on the right branch, then switch
             if self.localBranch().name != self.version:
-                self.repo.create_head(self.version, self.repo.remotes.origin.refs[self.version])
-                self.repo.heads[self.version].set_tracking_branch(self.repo.remotes.origin.refs[self.version])
-                self.repo.heads[self.version].checkout()
+                self.trackRemoteBranch(self.version)
                 updated = True
 
             la = list(self.commitsAhead())
