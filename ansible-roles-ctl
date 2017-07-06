@@ -147,13 +147,19 @@ class AnsibleRole(GalaxyRole):
         if self.repo.head.is_detached:
             return []
 
-        return Commit.iter_items(self.repo, "{}..HEAD".format(self.remoteBranch()))
+        if self.remoteBranch().is_valid():
+            return Commit.iter_items(self.repo, "{}..HEAD".format(self.remoteBranch()))
+        else:
+            return Commit.iter_items(self.repo, "HEAD")
 
     def commitsBehind(self):
         if self.repo.head.is_detached:
             return []
 
-        return Commit.iter_items(self.repo, "HEAD..{}".format(self.remoteBranch()))
+        if self.remoteBranch().is_valid():
+            return Commit.iter_items(self.repo, "HEAD..{}".format(self.remoteBranch()))
+        else:
+            return []
 
     def versionTags(self):
         list = {}
@@ -367,7 +373,7 @@ def action_status(dep_list, selected_roles, args):
             ret_ok = False
             msg += "\n  is off target: {}".format(e)
 
-        if role.localBranch() is not None:
+        if role.localBranch() is not None and role.remoteBranch().is_valid():
             if role.localBranch().commit == role.remoteBranch().commit:
                 msg += "\n  is up-to-date with origin"
 
@@ -389,13 +395,22 @@ def action_status(dep_list, selected_roles, args):
                         for commit in lb:
                             msg += "\n    {}:  {}".format(time.strftime("%Y-%m-%d %H:%M %Z", time.gmtime(commit.committed_date)), commit.summary)
 
-        new_versions = role.newVersions()
-        if new_versions:
-            warning_msg = True
-            msg += "\n  has new version(s) available: {}".format(", ".join(new_versions))
-            if args.changelog:
-                commit = role.repo.tags["v{}".format(new_versions[-1])]
-                display_changelog(commit, new_versions)
+                new_versions = role.newVersions()
+                if new_versions:
+                    warning_msg = True
+                    msg += "\n  has new version(s) available: {}".format(", ".join(new_versions))
+                    if args.changelog:
+                        commit = role.repo.tags["v{}".format(new_versions[-1])]
+                        display_changelog(commit, new_versions)
+
+	if role.localBranch() is not None and not role.remoteBranch().is_valid():
+            la = list(role.commitsAhead())
+            if (la):
+                warning_msg = True
+                msg += "\n  is {} commits ahead (empty) origin".format(len(la))
+                if args.changelog:
+                    for commit in la:
+                        msg += "\n    {}:  {}".format(time.strftime("%Y-%m-%d %H:%M %Z", time.gmtime(commit.committed_date)), commit.summary)
 
         if role.repo.is_dirty():
             warning_msg = True
