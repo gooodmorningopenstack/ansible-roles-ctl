@@ -292,7 +292,7 @@ class AnsibleRole(GalaxyRole):
 
         return True
 
-def load_deps(args):
+def load_deps(args, selected_roles):
     try:
         stream = open("requirements.yml", "r")
     except Exception as e:
@@ -313,6 +313,9 @@ def load_deps(args):
     for dep in required_roles:
         role_info = RoleRequirement.role_yaml_parse(dep)
         role = AnsibleRole(**role_info)
+
+        if selected_roles and role.name not in selected_roles:
+            continue
 
         try:
             role.testValid()
@@ -509,7 +512,7 @@ args = parser.parse_args()
 selected_roles = []
 if hasattr(args, 'roles'):
     selected_roles = map(lambda i: i.split("=")[0], args.roles)
-dep_list = load_deps(args)
+dep_list = load_deps(args, selected_roles)
 
 # action!
 if hasattr(args, 'func'):
