@@ -194,7 +194,8 @@ class AnsibleRole(GalaxyRole):
             return False
 
     def trackRemoteBranch(self, branch):
-        self.repo.create_head(branch, self.repo.remotes.origin.refs[branch])
+        if branch not in self.repo.refs:
+            self.repo.create_head(branch, self.repo.remotes.origin.refs[branch])
         self.repo.heads[branch].set_tracking_branch(self.repo.remotes.origin.refs[branch])
         self.repo.heads[branch].checkout()
 
